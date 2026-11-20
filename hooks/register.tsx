@@ -20,9 +20,6 @@ const isRefreshing = atom({ plugin: 'account-usage', key: 'isRefreshing' } as co
 const sortBy = atom({ plugin: 'account-usage', key: 'sortBy' } as const, '')
 const confirmingReset = atom({ plugin: 'account-usage', key: 'confirmingReset' } as const, '')
 const resettingFor = atom({ plugin: 'account-usage', key: 'resettingFor' } as const, '')
-// The first account line shown under the buttons; the add-on scrolls the list itself so the buttons never move.
-const scrollRow = atom({ plugin: 'account-usage', key: 'scrollRow' } as const, 0)
-let lastScrollRow = 0
 
 type Host = Parameters<Hook<'session.start'>>[0]
 type Json = Record<string, any>
@@ -349,12 +346,6 @@ export const register: Register = on => {
     return result
   })
 
-  on('ui.scroll', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (lastScrollRow === 0) return next(e)
-    await update($, scrollRow, r => Math.min(lastScrollRow, Math.max(0, r + e.by)))
-    return {}
-  })
-
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const list = await read($, accounts)
     if (list.length === 0) return next(e)
@@ -430,15 +421,12 @@ export const register: Register = on => {
         ),
       ),
     ])
-    // The buttons and the blank row under them stay; the account lines get the rest of the band's rows.
-    const room = Math.max(1, e.props.maxRows - 2)
-    const cut = lines.length > room
-    const shownRows = cut ? room - 1 : lines.length
-    lastScrollRow = Math.max(0, lines.length - shownRows)
-    const top = Math.min(await read($, scrollRow), lastScrollRow)
-    const below = lines.length - top - shownRows
+    // The band scrolls as usual; the buttons and the blank row under them are drawn at the first row it shows,
+    // so they stay at the top while the account lines scroll past under them.
+    const top = Math.max(0, Math.min(e.props.scroll.offset, lines.length + 2 - e.props.scroll.bodyRows))
     return (
       <Box flexDirection="column">
+        {lines.slice(0, top)}
         <Box key="controls" overflowX="scroll">
           {toggle}
           {refreshing ? (
@@ -450,8 +438,7 @@ export const register: Register = on => {
           {sortButton('Weekly', 'Sort by weekly reset')}
         </Box>
         <Text key="gap"> </Text>
-        {lines.slice(top, top + shownRows)}
-        {below > 0 ? <Text key="more" dimColor>{`${below} more`}</Text> : null}
+        {lines.slice(top)}
       </Box>
     )
   })

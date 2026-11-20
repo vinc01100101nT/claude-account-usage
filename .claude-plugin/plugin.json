@@ -1,1 +1,1 @@
-{ "name": "account-usage", "version": "0.3.0", "description": "Each saved Claude account's 5-hour and weekly usage and free resets above the prompt, with buttons to switch account and use a free reset.", "types": "./types/index.d.ts" }
+{ "name": "account-usage", "version": "0.3.1", "description": "Each saved Claude account's 5-hour and weekly usage and free resets above the prompt, with buttons to switch account and use a free reset.", "types": "./types/index.d.ts" }
