@@ -23,5 +23,8 @@ From a shell:
 claude plugin install account-usage --marketplace vinc01100101nT/claude-account-usage
 ```
 
+In VS Code: in the Claude Code panel, type `/plugin` to open Manage plugins, add `vinc01100101nT/claude-account-usage`
+as a marketplace, then install account-usage.
+
 In the desktop app, where `/plugin` does not run: click + next to the prompt box, then Plugins, Add marketplace with
 `vinc01100101nT/claude-account-usage`, then Add plugin.
