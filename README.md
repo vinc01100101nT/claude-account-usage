@@ -7,8 +7,6 @@ account, refresh, sort by reset time, hide the list, and use a free reset (it as
 An account appears after you `/login` to it once. The numbers refresh every minute and after every reply, and all
 open sessions share one fetch.
 
-Needs Python 3 on your computer, runnable as `python`.
-
 ## Install
 
 At the prompt of a terminal session:
