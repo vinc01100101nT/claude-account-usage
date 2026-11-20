@@ -6,6 +6,6 @@ export type Account = { email: string; signedIn: boolean; windows: UsageWindow[]
 
 declare module 'claude-code' {
   interface PluginState {
-    'account-usage': { accounts: Account[]; isCollapsed: boolean; switchingTo: string; isRefreshing: boolean; sortBy: string; confirmingReset: string; resettingFor: string }
+    'account-usage': { accounts: Account[]; isCollapsed: boolean; switchingTo: string; isRefreshing: boolean; sortBy: string; confirmingReset: string; resettingFor: string; scrollRow: number }
   }
 }

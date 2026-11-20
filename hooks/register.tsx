@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { Hook, Register } from 'claude-code'
+import type { Hook, Register, RenderChildren } from 'claude-code'
 
 import type { Account, FreeReset, UsageWindow } from '../types'
 
@@ -20,6 +20,9 @@ const isRefreshing = atom({ plugin: 'account-usage', key: 'isRefreshing' } as co
 const sortBy = atom({ plugin: 'account-usage', key: 'sortBy' } as const, '')
 const confirmingReset = atom({ plugin: 'account-usage', key: 'confirmingReset' } as const, '')
 const resettingFor = atom({ plugin: 'account-usage', key: 'resettingFor' } as const, '')
+// The first account line shown under the buttons; the add-on scrolls the list itself so the buttons never move.
+const scrollRow = atom({ plugin: 'account-usage', key: 'scrollRow' } as const, 0)
+let lastScrollRow = 0
 
 type Host = Parameters<Hook<'session.start'>>[0]
 type Json = Record<string, any>
@@ -346,6 +349,12 @@ export const register: Register = on => {
     return result
   })
 
+  on('ui.scroll', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (lastScrollRow === 0) return next(e)
+    await update($, scrollRow, r => Math.min(lastScrollRow, Math.max(0, r + e.by)))
+    return {}
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const list = await read($, accounts)
     if (list.length === 0) return next(e)
@@ -370,9 +379,67 @@ export const register: Register = on => {
       />
     )
     if (collapsed) return toggle
+    const line = (key: string, ...children: RenderChildren[]) => (
+      <Box key={key} overflowX="scroll">
+        {children}
+      </Box>
+    )
+    const lines = sorted(list, sortLabel).flatMap((account, i) => [
+      ...(i > 0 ? [line(`${account.email} space`, <Text key="space"> </Text>)] : []),
+      line(
+        account.email,
+        <Text key="email" bold>{account.email}</Text>,
+        account.signedIn ? (
+          <Text key="signed" dimColor> (signed in)</Text>
+        ) : busy === account.email ? (
+          <Text key="switching" dimColor> Switching…</Text>
+        ) : busy ? null : (
+          <Button key="switch" label="Switch" onPress={() => void switchTo($, account.email)} />
+        ),
+      ),
+      ...(account.error ? [line(`${account.email} error`, <Text key="error" dimColor>{'   ' + account.error}</Text>)] : []),
+      ...(account.windows ?? []).map(w =>
+        line(
+          `${account.email} ${w.label}`,
+          <Text key="label" dimColor>{`   ${w.label}: `}</Text>,
+          w.percent === null ? (
+            <Text key="percent" dimColor>n/a</Text>
+          ) : (
+            <Text key="percent" color={usageColor(w.percent)}>{`${w.percent}%`}</Text>
+          ),
+          w.resets ? <Text key="resets" dimColor>{` · resets: ${w.resets}`}</Text> : null,
+        ),
+      ),
+      ...(account.freeResets ?? []).map(r =>
+        line(
+          `${account.email} ${r.kind}`,
+          <Text key="kind" dimColor>{`   ${r.kind}: `}</Text>,
+          <Text key="left">{`${r.left ?? 'n/a'} left`}</Text>,
+          r.expires ? <Text key="expires" dimColor>{` · expires: ${r.expires}`}</Text> : null,
+          !r.left ? null : resetting === account.email ? (
+            <Text key="using" dimColor> Using reset…</Text>
+          ) : confirming === account.email ? (
+            <Box key="confirm">
+              <Text color="warning"> Use this reset now? </Text>
+              <Button key="yes" label="Yes, use it" onPress={() => void useReset($, account.email)} />
+              <Button key="cancel" label="Cancel" onPress={() => void update($, confirmingReset, () => '')} />
+            </Box>
+          ) : resetting ? null : (
+            <Button key="use" label="Use reset" onPress={() => void update($, confirmingReset, () => account.email)} />
+          ),
+        ),
+      ),
+    ])
+    // The buttons and the blank row under them stay; the account lines get the rest of the band's rows.
+    const room = Math.max(1, e.props.maxRows - 2)
+    const cut = lines.length > room
+    const shownRows = cut ? room - 1 : lines.length
+    lastScrollRow = Math.max(0, lines.length - shownRows)
+    const top = Math.min(await read($, scrollRow), lastScrollRow)
+    const below = lines.length - top - shownRows
     return (
-      <Box flexDirection="column" gap={1}>
-        <Box key="controls">
+      <Box flexDirection="column">
+        <Box key="controls" overflowX="scroll">
           {toggle}
           {refreshing ? (
             <Text dimColor> Refreshing…</Text>
@@ -382,50 +449,9 @@ export const register: Register = on => {
           {sortButton('5-hour', 'Sort by 5-hour reset')}
           {sortButton('Weekly', 'Sort by weekly reset')}
         </Box>
-        {sorted(list, sortLabel).map(account => (
-          <Box key={account.email} flexDirection="column">
-            <Box>
-              <Text bold>{account.email}</Text>
-              {account.signedIn ? (
-                <Text dimColor> (signed in)</Text>
-              ) : busy === account.email ? (
-                <Text dimColor> Switching…</Text>
-              ) : busy ? null : (
-                <Button key="switch" label="Switch" onPress={() => void switchTo($, account.email)} />
-              )}
-            </Box>
-            {account.error ? <Text dimColor>{'   ' + account.error}</Text> : null}
-            {(account.windows ?? []).map(w => (
-              <Box key={w.label}>
-                <Text dimColor>{`   ${w.label}: `}</Text>
-                {w.percent === null ? (
-                  <Text dimColor>n/a</Text>
-                ) : (
-                  <Text color={usageColor(w.percent)}>{`${w.percent}%`}</Text>
-                )}
-                {w.resets ? <Text dimColor>{` · resets: ${w.resets}`}</Text> : null}
-              </Box>
-            ))}
-            {(account.freeResets ?? []).map(r => (
-              <Box key={r.kind}>
-                <Text dimColor>{`   ${r.kind}: `}</Text>
-                <Text>{`${r.left ?? 'n/a'} left`}</Text>
-                {r.expires ? <Text dimColor>{` · expires: ${r.expires}`}</Text> : null}
-                {!r.left ? null : resetting === account.email ? (
-                  <Text dimColor> Using reset…</Text>
-                ) : confirming === account.email ? (
-                  <Box key="confirm">
-                    <Text color="warning"> Use this reset now? </Text>
-                    <Button key="yes" label="Yes, use it" onPress={() => void useReset($, account.email)} />
-                    <Button key="cancel" label="Cancel" onPress={() => void update($, confirmingReset, () => '')} />
-                  </Box>
-                ) : resetting ? null : (
-                  <Button key="use" label="Use reset" onPress={() => void update($, confirmingReset, () => account.email)} />
-                )}
-              </Box>
-            ))}
-          </Box>
-        ))}
+        <Text key="gap"> </Text>
+        {lines.slice(top, top + shownRows)}
+        {below > 0 ? <Text key="more" dimColor>{`${below} more`}</Text> : null}
       </Box>
     )
   })
